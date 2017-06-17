@@ -5,21 +5,108 @@ output:
     keep_md: true
 ---
 
+## 1. Loading and preprocessing the data
+```{r setup, echo=TRUE}
+library(dplyr)
+library(ggplot2)
+```
 
-## Loading and preprocessing the data
+```{r echo=TRUE}
+file<-unzip("activity.zip")
+data<-read.csv(file, header=TRUE, na.strings="NA")
+rm(file)
+
+dataClean<-na.omit(data)
+
+```
+
+## 2. What is mean total number of steps taken per day?
+```{r echo=TRUE}
+# Sum steps per each day
+dataAgg<-aggregate(dataClean$steps, by=list(Date=dataClean$date), FUN=sum)
+# Find the mean
+mean<-as.integer(mean(dataAgg$x))
+# Find the median
+median<-as.integer(median(dataAgg$x))
+
+# Simple histogram of steps by day
+hist(dataAgg$x, main="Histogram of the Total Number of Steps Taken per Day", xlab="Steps per Day", border="black", col="blue")
+```
+
+Mean total number of steps taken per day is `r mean` and the median is `r median`.
+
+## 3. What is the average daily activity pattern?
+```{r echo=TRUE}
+# Sum steps by interval, ignoring missing values (using the dataClean dataset)
+dataInt<-aggregate(dataClean$steps, by=list(Interval=dataClean$interval), FUN=sum)
+
+# Plot steps by interval
+plot(dataInt$Interval, dataInt$x, type="l", main="Average Daily Activity Pattern", xlab="Interval", ylab="Average Number of Steps Taken" )
+
+# Find the interval with maximum number of steps
+maxInt<-dataInt$Interval[which.max(dataInt$x)]
+```
+
+On average, across all the days in the dataset, interval `r maxInt` contains the maximum number of steps.
+
+## 4. Imputing missing values
+```{r echo=TRUE}
+# Calculate number of missing values in the original dataset
+missingVal<-sum(is.na(data$steps))
+```
+
+There are a total of `r missingVal` missing observations in the dataset.
 
 
+```{r echo=TRUE}
+# Create a temporary dataset from raw data and sum steps by interval
+dataTemp<-aggregate(data$steps, by=list(Interval=data$interval), FUN=sum)
 
-## What is mean total number of steps taken per day?
+# Vector of boolean values for missing values in the original dataset
+missing <- !complete.cases(data)
 
+# Create a temporary dataset with just the missing values from the original dataset
+dataTemp2 <- data[missing == TRUE, ]
 
+# Fill missing values with totals for that interval
+dataTemp2[, 1] <- dataTemp$x
 
-## What is the average daily activity pattern?
+# Combine the two sets
+imputedData <- rbind(data[complete.cases(data), ], dataTemp2)
+# Sum steps by date
+imputedData2 <- aggregate(steps ~ date, data = imputedData, sum)
+# Simple histogram of steps by day
+hist(imputedData2$steps, main="Histogram of the Total Number of Steps Taken per Day", xlab="Steps per Day", border="black", col="blue")
 
+# Calculate the new mean
+meanNew<-mean(imputedData2$steps)
+meanNew<-as.integer(meanNew)
+```
 
+The new mean is `r meanNew`
 
-## Imputing missing values
+## 5. Are there differences in activity patterns between weekdays and weekends?
+```{r echo=TRUE}
+# Use the clean imputed dataset for this part
+weekDayData<-imputedData
 
+# Make sure the dates are in the proper format
+weekDayData$date<-as.Date(weekDayData$date)
 
+# Convert weekdays into proper days
+weekDayData$day<-weekdays(weekDayData$date)
+# Mark all days as "weekdays" to start
+weekDayData$dayType<-"weekday"
+# Mark Saturdays and Sundays as "weekend"
+weekDayData$dayType[weekDayData$day %in% c("Saturday", "Sunday")] <- "weekend"
 
-## Are there differences in activity patterns between weekdays and weekends?
+# Group intervals into weekdays and weekends and summarize steps for each group
+avgPerDay <- weekDayData %>% group_by(interval,dayType) %>% summarise(AvgSteps=mean(steps,na.rm = TRUE))
+
+# Plot the results
+ggplot(data=avgPerDay, mapping=aes(x=interval, y=AvgSteps)) + geom_line() + facet_grid(dayType ~ .) + 
+    scale_x_continuous("Day Interval", 
+    breaks = seq(min(avgPerDay$interval), max(avgPerDay$interval), 100)) + 
+    scale_y_continuous("Average Number of Steps") + ggtitle("Average Number of Steps Taken by Interval")
+
+```
